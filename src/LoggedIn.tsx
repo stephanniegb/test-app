@@ -11,6 +11,10 @@ interface LoggedInProps {
   isLoading: boolean;
   disconnectLoading: boolean;
   disconnectError?: any;
+  isTransferPending?: boolean;
+  transferError?: any;
+  balanceLoading?: boolean;
+  balanceError?: any;
   onDeployAccount: () => void;
   onConnectAccount: () => void;
   onFetchBalance: () => void;
@@ -18,7 +22,6 @@ interface LoggedInProps {
   onDisconnect: () => void;
   onTransferRecipientChange: (value: string) => void;
   onTransferAmountChange: (value: string) => void;
-  onGetDeploymentStatus: () => void;
 }
 
 export default function LoggedIn({
@@ -32,7 +35,10 @@ export default function LoggedIn({
   isLoading,
   disconnectLoading,
   disconnectError,
-  onDeployAccount,
+  isTransferPending,
+  transferError,
+  balanceLoading,
+  balanceError,
   onConnectAccount,
   onFetchBalance,
   onTransferToken,
@@ -78,8 +84,15 @@ export default function LoggedIn({
                 </div>
                 <div className="balance-display">
                   <span className="balance-label">STRK Balance:</span>
-                  <span className="balance-value">{strkBalance} STRK</span>
+                  <span className="balance-value">
+                    {balanceLoading ? "Loading..." : strkBalance} STRK
+                  </span>
                 </div>
+                {balanceError && (
+                  <div className="error-message">
+                    Balance error: {balanceError.message || balanceError}
+                  </div>
+                )}
                 <div className="connection-badge">
                   <span className="badge-icon">🔐</span>
                   Logged in via {userInfo?.authConnectionId || connectorName}
@@ -103,14 +116,6 @@ export default function LoggedIn({
 
         <div className="actions-grid">
           <button
-            onClick={onDeployAccount}
-            className="action-button primary"
-            disabled={isLoading}
-          >
-            {isLoading ? "⏳ Processing..." : "🚀 Deploy Account"}
-          </button>
-
-          <button
             onClick={onConnectAccount}
             className="action-button secondary"
             disabled={isLoading}
@@ -121,9 +126,11 @@ export default function LoggedIn({
           <button
             onClick={onFetchBalance}
             className="action-button secondary"
-            disabled={isLoading}
+            disabled={isLoading || balanceLoading}
           >
-            {isLoading ? "⏳ Processing..." : "🔄 Refresh Balance"}
+            {isLoading || balanceLoading
+              ? "⏳ Processing..."
+              : "🔄 Refresh Balance"}
           </button>
         </div>
 
@@ -160,14 +167,47 @@ export default function LoggedIn({
               />
             </div>
           </div>
-          <div>
+          <div className="absolute">
             <button
               onClick={onTransferToken}
               className="action-button accent w-full"
-              disabled={isLoading || !transferRecipient || !transferAmount}
+              disabled={
+                isLoading ||
+                isTransferPending ||
+                !transferRecipient ||
+                !transferAmount ||
+                parseFloat(transferAmount) <= 0
+              }
             >
-              {isLoading ? "⏳ Processing..." : "💸 Transfer Token"}
+              {isLoading || isTransferPending
+                ? "⏳ Processing..."
+                : "💸 Transfer Token"}
             </button>
+            {!transferRecipient && (
+              <p className="text-sm text-gray-500 mt-1">
+                Please enter recipient address
+              </p>
+            )}
+            {!transferAmount && (
+              <p className="text-sm text-gray-500 mt-1">
+                Please enter transfer amount
+              </p>
+            )}
+            {transferAmount && parseFloat(transferAmount) <= 0 && (
+              <p className="text-sm text-red-500 mt-1">
+                Amount must be greater than 0
+              </p>
+            )}
+            {transferError && (
+              <p className="text-sm text-red-500 mt-1">
+                Transfer error: {transferError.message || transferError}
+              </p>
+            )}
+            {isTransferPending && (
+              <p className="text-sm text-blue-500 mt-1">
+                Transaction pending...
+              </p>
+            )}
           </div>
         </div>
 
@@ -183,38 +223,6 @@ export default function LoggedIn({
           {disconnectError && (
             <div className="error-message">{disconnectError.message}</div>
           )}
-        </div>
-      </div>
-
-      {/* Right Column */}
-      <div className="dashboard-right">
-        {/* Instructions Section */}
-        <div className="instructions-section">
-          <h3 className="section-title">Getting Started</h3>
-          <div className="instructions-card">
-            <ol>
-              <li>
-                <p>
-                  Deploy your account by clicking the &quot;Deploy Account&quot;
-                  button. do this if you have not done it before with the logged
-                  in account. This will create a new account on StarkNet.
-                </p>
-              </li>
-              <li>
-                <p>
-                  Connect your account by clicking the &quot;Connect
-                  Account&quot; button. This will connect your account to the
-                  StarkNet blockchain.
-                </p>
-              </li>
-              <li>
-                <p>
-                  Test the by clicking the &quot;Transfer Token&quot; button to
-                  send STRK token to another address.
-                </p>
-              </li>
-            </ol>
-          </div>
         </div>
       </div>
     </div>

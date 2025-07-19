@@ -1,13 +1,12 @@
 import { PaymasterRpc, RpcProvider } from "starknet";
-import { mainnet, sepolia } from "@starknet-react/chains";
-import { StarknetConfig } from "w3a-react";
+import { StarknetConfig, mainnet, sepolia } from "w3a-react";
 
 const Provider = ({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) => {
-  const chains = [mainnet, sepolia];
+  const chains = [sepolia];
   // StarkNet provider setup
   const starknetProvider = new RpcProvider({
     nodeUrl: "https://starknet-sepolia.public.blastapi.io/rpc/v0_8",

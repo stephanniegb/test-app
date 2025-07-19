@@ -4,17 +4,23 @@ import {
   useWeb3AuthStatus,
   useConnect,
   useDisconnect,
+  useSendTransaction,
+  useContract,
+  useBalance,
+  useReadContract,
+  useNetwork,
+  useCall,
 } from "w3a-react";
 import LoggedOut from "./LoggedOut";
 import LoggedIn from "./LoggedIn";
 import { useState } from "react";
 import type { Account } from "starknet";
+import { CONTRACT_ABI, CONTRACT_ADDRESS } from "./abi";
 
 function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [transferRecipient, setTransferRecipient] = useState<string>("");
   const [transferAmount, setTransferAmount] = useState<string>("1");
-  const [strkBalance, setStrkBalance] = useState<string>("0");
 
   const {
     account,
@@ -28,11 +34,6 @@ function App() {
   const { connect } = useConnect();
   const { disconnect } = useDisconnect();
 
-  console.log({
-    connect,
-    disconnect,
-  });
-
   const {
     status: web3AuthStatus,
     isConnected: isWeb3AuthConnected,
@@ -44,54 +45,86 @@ function App() {
     isReady,
   } = useWeb3AuthStatus();
 
-  console.log({
-    web3AuthStatus,
-    isWeb3AuthConnected,
-    isInitializing: isWeb3AuthInitializing,
-    web3AuthInitError,
-    starknetError,
-    hasError,
-    getErrorMessage,
-    isReady,
+  const { contract } = useContract({
+    abi: CONTRACT_ABI,
+    address: CONTRACT_ADDRESS,
   });
 
-  console.log({
-    account,
-    address,
-    web3AuthConnection,
-    web3AuthDisconnect,
-    userInfo,
-    web3AuthConnectorError,
+  // Use the balance hook to get token balance
+  const {
+    data: balanceData,
+    error: balanceError,
+    isLoading: balanceLoading,
+    isError: balanceIsError,
+    refetch: refetchBalance,
+  } = useBalance({
+    token: CONTRACT_ADDRESS,
+    address: address as string,
+    enabled: !!address && !!CONTRACT_ADDRESS,
+    watch: true,
   });
 
-  // return (
-  //   <div>
-  //     <p>Hello </p>
-  //     <button>Login</button>
-  //   </div>
-  // );
+  // Use balance from hook instead of local state
+  const strkBalance = balanceData?.formatted || "0";
+
+  const {
+    send,
+    sendAsync,
+    isPending,
+    isError,
+    error,
+    data: txResponse,
+  } = useSendTransaction({
+    calls:
+      contract && address && transferRecipient && transferAmount
+        ? [
+            contract.populate("transfer", [
+              transferRecipient,
+              BigInt(parseFloat(transferAmount) * 10 ** 18), // Convert to wei (assuming 18 decimals)
+            ]),
+          ]
+        : undefined,
+  });
 
   const handleFetchBalance = () => {
-    // fetchBalance(address as string, starknetProvider, setStrkBalance);
+    if (refetchBalance) {
+      refetchBalance();
+    }
   };
 
-  const handleTransferToken = () => {
-    // transferToken(
-    //   account!,
-    //   starknetProvider,
-    //   transferRecipient,
-    //   transferAmount,
-    //   setIsLoading
-    // );
+  const handleTransferToken = async () => {
+    if (!transferRecipient || !transferAmount) {
+      alert("Please enter both recipient address and amount");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const result = await sendAsync();
+      console.log("Transfer successful:", result);
+      alert("Transfer successful! Check the console for transaction details.");
+      // Clear form after successful transfer
+      setTransferRecipient("");
+      setTransferAmount("1");
+    } catch (error) {
+      console.error("Transfer failed:", error);
+      alert(
+        `Transfer failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Event handlers for UI
   const handleTransferRecipientChange = (value: string) => {
-    // setTransferRecipient(value);
+    setTransferRecipient(value);
   };
 
   const handleTransferAmountChange = (value: string) => {
-    // setTransferAmount(value);
+    setTransferAmount(value);
   };
 
   const handleConnect = () => {
@@ -102,31 +135,49 @@ function App() {
     disconnect();
   };
 
-  const handleGetDeploymentStatus = () => {
-    // getDeploymentStatus({
-    //   contractAddress: address as string,
-    //   starknetProvider,
-    // });
-  };
+  const { chain } = useNetwork();
+  const { data, error: readerr } = useReadContract({
+    abi: CONTRACT_ABI,
+    functionName: "balanceOf",
+    address: CONTRACT_ADDRESS,
+    args: [address],
+    enabled: !!address,
+  });
+
+  console.log("🌸read:", {
+    data,
+    readerr,
+    chain,
+  });
+
+  const { data: callme, error: callerr } = useCall({
+    abi: [
+      {
+        name: "symbol",
+        type: "function",
+        inputs: [],
+        outputs: [
+          {
+            type: "core::felt252",
+          },
+        ],
+        state_mutability: "view",
+      },
+    ],
+    functionName: "symbol",
+    address: chain.nativeCurrency.address,
+    args: [],
+  });
+
+  console.log({
+    callme,
+    callerr,
+  });
 
   // Render based on connection state
   if (web3AuthConnection?.isConnected) {
     return (
       <div className="app-container">
-        <header className="app-header">
-          <h1 className="app-title">
-            <a
-              target="_blank"
-              href="https://web3auth.io/docs/sdk/pnp/web/modal"
-              rel="noreferrer"
-            >
-              Web3Auth
-            </a>
-            <span className="title-separator">×</span>
-            <span>StarkNet Demo</span>
-          </h1>
-        </header>
-
         <main className="app-main">
           <LoggedIn
             userInfo={userInfo}
@@ -139,6 +190,10 @@ function App() {
             isLoading={isLoading}
             disconnectLoading={web3AuthDisconnect?.loading ?? false}
             disconnectError={web3AuthConnectorError}
+            isTransferPending={isPending}
+            transferError={error}
+            balanceLoading={balanceLoading}
+            balanceError={balanceError}
             onDeployAccount={() => {}}
             onConnectAccount={() => {}}
             onFetchBalance={handleFetchBalance}
@@ -146,39 +201,13 @@ function App() {
             onDisconnect={handleDisconnect}
             onTransferRecipientChange={handleTransferRecipientChange}
             onTransferAmountChange={handleTransferAmountChange}
-            onGetDeploymentStatus={handleGetDeploymentStatus}
           />
         </main>
-
-        <footer className="app-footer">
-          <a
-            href="https://github.com/stephanniegb/web3auth-starknet"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="footer-link"
-          >
-            📚 View Source Code
-          </a>
-        </footer>
       </div>
     );
   } else {
     return (
       <div className="app-container">
-        <header className="app-header">
-          <h1 className="app-title">
-            <a
-              target="_blank"
-              href="https://web3auth.io/docs/sdk/pnp/web/modal"
-              rel="noreferrer"
-            >
-              Web3Auth
-            </a>
-            <span className="title-separator">×</span>
-            <span>StarkNet Demo</span>
-          </h1>
-        </header>
-
         <main className="app-main">
           <LoggedOut
             connectLoading={web3AuthConnection?.loading ?? false}
@@ -193,17 +222,6 @@ function App() {
             onConnect={handleConnect}
           />
         </main>
-
-        <footer className="app-footer">
-          <a
-            href="https://github.com/stephanniegb/web3auth-starknet"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="footer-link"
-          >
-            📚 View Source Code
-          </a>
-        </footer>
       </div>
     );
   }
